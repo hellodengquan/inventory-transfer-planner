@@ -1,0 +1,22 @@
+{
+  "name": "inventory-transfer-planner",
+  "version": "1.0.0",
+  "description": "库存调拨规划器 - 调拨申请、库存约束检查及调拨方案确认系统",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "init-db": "node scripts/init-db.js",
+    "seed-data": "node scripts/seed-data.js"
+  },
+  "keywords": ["inventory", "transfer", "planner", "express", "sqlite"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "uuid": "^9.0.0"
+  }
+}
