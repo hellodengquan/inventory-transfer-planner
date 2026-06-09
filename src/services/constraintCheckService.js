@@ -2,6 +2,8 @@ const { allQuery, getQuery } = require('../db/database');
 
 class ConstraintCheckService {
   constructor() {
+    this._allQuery = allQuery;
+    this._getQuery = getQuery;
     this.VIOLATION_TYPES = {
       SOURCE_INSUFFICIENT: 'SOURCE_INSUFFICIENT',
       SOURCE_MIN_STOCK: 'SOURCE_MIN_STOCK',
@@ -17,6 +19,16 @@ class ConstraintCheckService {
       WARNING: 'WARNING',
       INFO: 'INFO'
     };
+  }
+
+  setDbFunctions(customGetQuery, customAllQuery) {
+    if (customGetQuery) this._getQuery = customGetQuery;
+    if (customAllQuery) this._allQuery = customAllQuery;
+  }
+
+  resetDbFunctions() {
+    this._getQuery = getQuery;
+    this._allQuery = allQuery;
   }
 
   createViolation(type, severity, message, extras = {}) {
@@ -36,7 +48,7 @@ class ConstraintCheckService {
     const violations = [];
 
     if (sourceWarehouseId !== null && sourceWarehouseId !== undefined) {
-      const sourceWh = await getQuery('SELECT id, name, status FROM warehouses WHERE id = ?', [sourceWarehouseId]);
+      const sourceWh = await this._getQuery('SELECT id, name, status FROM warehouses WHERE id = ?', [sourceWarehouseId]);
       if (!sourceWh) {
         violations.push(this.createViolation(
           this.VIOLATION_TYPES.WAREHOUSE_NOT_EXIST,
@@ -54,7 +66,7 @@ class ConstraintCheckService {
       }
     }
 
-    const targetWh = await getQuery('SELECT id, name, status FROM warehouses WHERE id = ?', [targetWarehouseId]);
+    const targetWh = await this._getQuery('SELECT id, name, status FROM warehouses WHERE id = ?', [targetWarehouseId]);
     if (!targetWh) {
       violations.push(this.createViolation(
         this.VIOLATION_TYPES.WAREHOUSE_NOT_EXIST,
@@ -96,7 +108,7 @@ class ConstraintCheckService {
       return { violations, details };
     }
 
-    const sku = await getQuery('SELECT id, sku_code, name, unit FROM skus WHERE id = ?', [skuId]);
+    const sku = await this._getQuery('SELECT id, sku_code, name, unit FROM skus WHERE id = ?', [skuId]);
     if (!sku) {
       violations.push(this.createViolation(
         this.VIOLATION_TYPES.SKU_NOT_EXIST,
@@ -107,11 +119,11 @@ class ConstraintCheckService {
       return { violations, details };
     }
 
-    const sourceInv = await getQuery(
+    const sourceInv = await this._getQuery(
       'SELECT * FROM inventory WHERE warehouse_id = ? AND sku_id = ?',
       [sourceWarehouseId, skuId]
     );
-    const targetInv = await getQuery(
+    const targetInv = await this._getQuery(
       'SELECT * FROM inventory WHERE warehouse_id = ? AND sku_id = ?',
       [targetWarehouseId, skuId]
     );
@@ -218,7 +230,7 @@ class ConstraintCheckService {
 
     sql += ' ORDER BY w.type = \'CENTER\' DESC, (i.available_qty - i.min_stock) DESC, i.available_qty DESC';
 
-    const sources = await allQuery(sql, params);
+    const sources = await this._allQuery(sql, params);
 
     const results = [];
     let remainingQty = requestedQty;
@@ -288,7 +300,7 @@ class ConstraintCheckService {
           item.requested_qty,
           target_warehouse_id
         );
-        const sku = await getQuery('SELECT sku_code, name, unit FROM skus WHERE id = ?', [item.sku_id]);
+        const sku = await this._getQuery('SELECT sku_code, name, unit FROM skus WHERE id = ?', [item.sku_id]);
 
         if (shortage > 0) {
           allViolations.push(this.createViolation(
