@@ -1,3 +1,11 @@
+/**
+ * 库存管理路由模块
+ * @module src/routes/inventory
+ * @description 提供库存的多维度查询、汇总统计、低库存告警、CRUD、
+ *              六大类型批量调整（IN/OUT/RESERVE/RELEASE/IN_TRANSIT_*）等接口。
+ *              调整操作使用 SQLite 事务保证原子性，禁止调整后数量为负
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery, db } = require('../db/database');

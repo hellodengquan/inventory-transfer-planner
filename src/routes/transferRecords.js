@@ -1,3 +1,11 @@
+/**
+ * 调拨记录路由模块
+ * @module src/routes/transferRecords
+ * @description 提供调拨历史记录的多维度筛选查询、单条详情、
+ *              入/出方向的汇总统计（按仓库或 SKU 聚合）等只读接口。
+ *              transfer_records 数据由 transferPlans.confirm 事务自动写入，不提供直接创建接口
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery } = require('../db/database');

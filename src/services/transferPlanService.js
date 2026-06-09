@@ -1,6 +1,17 @@
+/**
+ * 调拨方案服务 - 方案生成/确认/驳回/执行/删除 与 事务性状态机
+ * @module src/services/transferPlanService
+ * @description 维护调拨方案状态机 PENDING→CONFIRMED→COMPLETED 与分支 REJECTED/CANCELLED，
+ *              所有写操作均使用 serializeTransaction 保障事务原子性
+ */
+
 const { allQuery, getQuery, runQuery, db } = require('../db/database');
 const constraintCheckService = require('./constraintCheckService');
 
+/**
+ * 生成调拨方案编号 TP-YYYYMMDD-NNNN
+ * @returns {string}
+ */
 function generatePlanNo() {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -10,12 +21,22 @@ function generatePlanNo() {
   return `TP-${yyyy}${mm}${dd}-${rand}`;
 }
 
+/**
+ * 生成调拨记录编号 TRN-timestamp-rand
+ * @returns {string}
+ */
 function generateRecordNo() {
   const now = new Date();
   return `TRN-${now.getTime()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+/**
+ * 调拨方案服务类
+ */
 class TransferPlanService {
+  /**
+   * 构造函数，绑定默认数据库方法
+   */
   constructor() {
     this._allQuery = allQuery;
     this._getQuery = getQuery;
@@ -23,6 +44,13 @@ class TransferPlanService {
     this._db = db;
   }
 
+  /**
+   * 测试场景下的数据库方法依赖注入
+   * @param {Function} [customGet] 单行查询
+   * @param {Function} [customAll] 多行查询
+   * @param {Function} [customRun] 执行写入
+   * @param {object} [customDb] 数据库实例
+   */
   setDbFunctions(customGet, customAll, customRun, customDb) {
     if (customGet) this._getQuery = customGet;
     if (customAll) this._allQuery = customAll;
@@ -30,6 +58,9 @@ class TransferPlanService {
     if (customDb) this._db = customDb;
   }
 
+  /**
+   * 恢复数据库方法为默认实现
+   */
   resetDbFunctions() {
     this._getQuery = getQuery;
     this._allQuery = allQuery;
@@ -37,6 +68,12 @@ class TransferPlanService {
     this._db = db;
   }
 
+  /**
+   * 在 serialize 模式下执行 BEGIN→callback→COMMIT；异常时自动 ROLLBACK
+   * @param {Function} callback - 事务体，返回 Promise
+   * @returns {Promise<any>} callback 的返回值
+   * @throws {Error} 回滚后的原始异常
+   */
   serializeTransaction(callback) {
     return new Promise((resolve, reject) => {
       const database = this._db;
@@ -58,6 +95,13 @@ class TransferPlanService {
     });
   }
 
+  /**
+   * 为指定调拨申请生成 PENDING 状态的调拨方案（含约束检查、方案明细、违规记录）
+   * @param {number} requestId - 调拨申请 ID
+   * @param {string} [planner=''] - 规划人
+   * @returns {Promise<{planId:number, requestId:number, plan_no:string, status:string, checkResult:object, total_transfer_qty:number, request_id:number}>}
+   * @throws {{status:number, code:string, message:string}} 业务错误
+   */
   async generatePlan(requestId, planner = '') {
     const request = await this._getQuery('SELECT * FROM transfer_requests WHERE id = ?', [requestId]);
     if (!request) {
@@ -188,6 +232,13 @@ class TransferPlanService {
     return { planId: planResult.lastID, requestId: request.id, plan_no, status: 'PENDING', checkResult, total_transfer_qty, request_id: request.id };
   }
 
+  /**
+   * 确认调拨方案（事务原子性：源仓扣减可用→在途、目标仓加在途、写入记录、更新状态）
+   * @param {number} planId - 方案 ID
+   * @param {string} [review_comment=''] - 审批意见
+   * @param {string} [operator='system'] - 操作人
+   * @returns {Promise<{success:boolean, status:string}>}
+   */
   async confirmPlan(planId, review_comment = '', operator = 'system') {
     const plan = await this._getQuery('SELECT * FROM transfer_plans WHERE id = ?', [planId]);
     if (!plan) throw { status: 404, message: '调拨方案不存在', code: 'PLAN_NOT_FOUND' };
@@ -258,6 +309,12 @@ class TransferPlanService {
     return { success: true, status: 'CONFIRMED' };
   }
 
+  /**
+   * 驳回调拨方案；若申请无其他 PENDING 方案则同步降级申请为 REJECTED
+   * @param {number} planId - 方案 ID
+   * @param {string} [review_comment=''] - 驳回原因
+   * @returns {Promise<{success:boolean, status:string}>}
+   */
   async rejectPlan(planId, review_comment = '') {
     const plan = await this._getQuery('SELECT * FROM transfer_plans WHERE id = ?', [planId]);
     if (!plan) throw { status: 404, message: '调拨方案不存在', code: 'PLAN_NOT_FOUND' };
@@ -285,6 +342,12 @@ class TransferPlanService {
     return { success: true, status: 'REJECTED' };
   }
 
+  /**
+   * 执行调拨方案入库：源仓扣减在途、目标仓在途转可用；方案与申请同步为 COMPLETED
+   * @param {number} planId - 方案 ID
+   * @param {string} [operator='system'] - 操作人
+   * @returns {Promise<{success:boolean, status:string}>}
+   */
   async executePlan(planId, operator = 'system') {
     const plan = await this._getQuery('SELECT * FROM transfer_plans WHERE id = ?', [planId]);
     if (!plan) throw { status: 404, message: '调拨方案不存在', code: 'PLAN_NOT_FOUND' };
@@ -317,6 +380,11 @@ class TransferPlanService {
     return { success: true, status: 'COMPLETED' };
   }
 
+  /**
+   * 取消/删除调拨方案；删除最后一个待处理方案后申请回退为 SUBMITTED
+   * @param {number} planId - 方案 ID
+   * @returns {Promise<{success:boolean, status:string}>}
+   */
   async cancelPlan(planId) {
     const plan = await this._getQuery('SELECT * FROM transfer_plans WHERE id = ?', [planId]);
     if (!plan) throw { status: 404, message: '调拨方案不存在', code: 'PLAN_NOT_FOUND' };

@@ -1,3 +1,10 @@
+/**
+ * 仓库管理路由模块
+ * @module src/routes/warehouses
+ * @description 提供仓库的 CRUD、停用保护、编码唯一约束、库存子资源查询等接口。
+ *              删除仓库前会校验 HAS_INVENTORY；INACTIVE 仓库会被约束检查排除
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery } = require('../db/database');

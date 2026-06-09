@@ -1,3 +1,11 @@
+/**
+ * 统一请求校验中间件
+ * @module src/middleware/validateRequest
+ * @description 基于 express-validator 的校验工厂：定义 transferRequest、
+ *              transferPlan、warehouse、inventory、transferRecord 各路由的
+ *              body/query/param 校验规则，并通过 validate() 组合为中间件
+ */
+
 const { body, param, query, validationResult } = require('express-validator');
 
 const REQUEST_STATUSES = ['DRAFT', 'SUBMITTED', 'PLANNING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'CANCELLED', 'REJECTED'];
@@ -8,6 +16,11 @@ const WAREHOUSE_TYPES = ['CENTER', 'REGIONAL', 'NORMAL', 'TRANSIT'];
 const WAREHOUSE_STATUSES = ['ACTIVE', 'INACTIVE', 'MAINTENANCE'];
 const CHANGE_TYPES = ['IN', 'OUT', 'RESERVE', 'RELEASE', 'IN_TRANSIT_IN', 'IN_TRANSIT_OUT'];
 
+/**
+ * 工厂函数：将一组 express-validator 规则组合为中间件
+ * @param {Array} validations - express-validator 校验链数组
+ * @returns {Function} Express 中间件，校验失败返回 400 + 结构化错误
+ */
 function validate(validations) {
   return async function validationMiddleware(req, res, next) {
     for (const validation of validations) {

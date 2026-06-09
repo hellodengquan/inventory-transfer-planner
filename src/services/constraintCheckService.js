@@ -1,6 +1,32 @@
+/**
+ * 库存调拨约束检查服务
+ * @module src/services/constraintCheckService
+ * @description 提供 8 类调拨约束的 FATAL/WARNING/INFO 三级分级检查，
+ *              支持单仓调拨校验与多仓自动分配（中心仓优先、安全库存保护）
+ */
+
 const { allQuery, getQuery } = require('../db/database');
 
+/**
+ * @typedef {'FATAL'|'WARNING'|'INFO'} Severity 约束严重度
+ * @typedef {Object} Violation 单条约束违规
+ * @property {string} violation_type 违规类型枚举
+ * @property {Severity} severity 严重度
+ * @property {string} message 可读消息
+ * @property {?number} warehouse_id 关联仓库
+ * @property {?number} sku_id 关联 SKU
+ * @property {?number} current_value 当前值
+ * @property {?number} required_value 需求值
+ * @property {?number} threshold_value 阈值
+ */
+
+/**
+ * 约束检查服务类
+ */
 class ConstraintCheckService {
+  /**
+   * 初始化服务与 8 类违规类型枚举
+   */
   constructor() {
     this._allQuery = allQuery;
     this._getQuery = getQuery;
@@ -21,16 +47,32 @@ class ConstraintCheckService {
     };
   }
 
+  /**
+   * 测试场景下的依赖注入点（替换数据库方法）
+   * @param {Function} [customGetQuery] 自定义单行查询方法
+   * @param {Function} [customAllQuery] 自定义多行查询方法
+   */
   setDbFunctions(customGetQuery, customAllQuery) {
     if (customGetQuery) this._getQuery = customGetQuery;
     if (customAllQuery) this._allQuery = customAllQuery;
   }
 
+  /**
+   * 恢复数据库方法为原始实现
+   */
   resetDbFunctions() {
     this._getQuery = getQuery;
     this._allQuery = allQuery;
   }
 
+  /**
+   * 构造结构化违规对象
+   * @param {string} type - 违规类型枚举
+   * @param {Severity} severity - 严重度
+   * @param {string} message - 面向业务的可读消息
+   * @param {Object} [extras={}] - 可选上下文字段
+   * @returns {Violation}
+   */
   createViolation(type, severity, message, extras = {}) {
     return {
       violation_type: type,
@@ -44,6 +86,12 @@ class ConstraintCheckService {
     };
   }
 
+  /**
+   * 检查源/目标仓库存在且状态为 ACTIVE，以及源≠目标
+   * @param {?number} sourceWarehouseId - 源仓库 ID（单仓路径必填，多仓为 null）
+   * @param {number} targetWarehouseId - 目标仓库 ID（必填）
+   * @returns {Promise<Violation[]>} 违规列表
+   */
   async checkWarehousesExist(sourceWarehouseId, targetWarehouseId) {
     const violations = [];
 
@@ -94,6 +142,14 @@ class ConstraintCheckService {
     return violations;
   }
 
+  /**
+   * 单仓路径下对单个 SKU 进行 6 类约束检查
+   * @param {number} sourceWarehouseId - 源仓库 ID
+   * @param {number} targetWarehouseId - 目标仓库 ID
+   * @param {number} skuId - SKU ID
+   * @param {number} requestedQty - 调拨数量
+   * @returns {Promise<{violations: Violation[], details: object}>}
+   */
   async checkSingleItemTransfer(sourceWarehouseId, targetWarehouseId, skuId, requestedQty) {
     const violations = [];
     const details = {};
@@ -206,6 +262,16 @@ class ConstraintCheckService {
     return { violations, details };
   }
 
+  /**
+   * 多仓路径下为单个 SKU 寻找最佳源仓库组合
+   * 优先级排序规则：
+   *   1. 中心仓（CENTER）优先；2. 可调拨余量(available-min_stock)降序；3. 可用量降序
+   * 安全库存保护：调拨后不击穿单仓安全库存线
+   * @param {number} skuId - SKU ID
+   * @param {number} requestedQty - 需求总量
+   * @param {?number} [excludeWarehouseId=null] - 排除仓库（通常为目标仓）
+   * @returns {Promise<{sources:Array, shortage:number, totalAllocated:number}>}
+   */
   async findBestSourceWarehouses(skuId, requestedQty, excludeWarehouseId = null) {
     let sql = `
       SELECT
@@ -264,6 +330,14 @@ class ConstraintCheckService {
     return { sources: results, shortage, totalAllocated: requestedQty - shortage };
   }
 
+  /**
+   * 对完整调拨申请执行 8 类约束检查（入口方法）
+   * @param {Object} request - 调拨申请
+   * @param {?number} request.source_warehouse_id - 源仓（单仓）/null 触发多仓
+   * @param {number} request.target_warehouse_id - 目标仓
+   * @param {Array<{sku_id:number, requested_qty:number}>} request.items - 明细
+   * @returns {Promise<{passed:boolean, summary:string, fatalCount:number, warningCount:number, infoCount:number, violations:Violation[], itemResults:Array}>}
+   */
   async checkTransferRequest(request) {
     const { source_warehouse_id, target_warehouse_id, items } = request;
     const allViolations = [];
@@ -335,6 +409,12 @@ class ConstraintCheckService {
     return this.buildResult(allViolations, itemResults);
   }
 
+  /**
+   * 组装最终检查结果（计数、通过与否、摘要文本）
+   * @param {Violation[]} violations - 所有违规
+   * @param {object[]} itemResults - 每个 SKU 的逐行结果
+   * @returns {{passed:boolean, summary:string, fatalCount:number, warningCount:number, infoCount:number, violations:Violation[], itemResults:object[]}}
+   */
   buildResult(violations, itemResults) {
     const fatalCount = violations.filter(v => v.severity === this.SEVERITY.FATAL).length;
     const warningCount = violations.filter(v => v.severity === this.SEVERITY.WARNING).length;

@@ -1,3 +1,11 @@
+/**
+ * 调拨申请路由模块
+ * @module src/routes/transferRequests
+ * @description 提供调拨申请的 CRUD、状态流转（提交/取消/删除）、
+ *              约束检查预览等接口。创建接口挂载 transferRequestCreate 校验规则；
+ *              状态流转遵循状态机约束，允许 DRAFT→SUBMITTED→PLANNING→APPROVED→COMPLETED
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery, db } = require('../db/database');

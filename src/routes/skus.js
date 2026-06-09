@@ -1,3 +1,10 @@
+/**
+ * SKU 管理路由模块
+ * @module src/routes/skus
+ * @description 提供商品 SKU 的 CRUD、分类枚举、编码唯一约束、全网库存查询等接口。
+ *              删除 SKU 前校验是否存在库存引用（HAS_INVENTORY）
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery } = require('../db/database');

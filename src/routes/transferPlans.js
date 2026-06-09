@@ -1,3 +1,11 @@
+/**
+ * 调拨方案路由模块
+ * @module src/routes/transferPlans
+ * @description 提供调拨方案的列表查询、详情、生成、确认、驳回、执行、删除等接口。
+ *              方案状态机 PENDING→CONFIRMED→COMPLETED，所有写操作均使用事务；
+ *              单仓路径按 request.source_warehouse_id 生成，未指定时触发多仓自动分配
+ */
+
 const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery, db } = require('../db/database');
