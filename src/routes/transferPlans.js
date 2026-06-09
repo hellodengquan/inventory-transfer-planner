@@ -4,6 +4,120 @@
  * @description 提供调拨方案的列表查询、详情、生成、确认、驳回、执行、删除等接口。
  *              方案状态机 PENDING→CONFIRMED→COMPLETED，所有写操作均使用事务；
  *              单仓路径按 request.source_warehouse_id 生成，未指定时触发多仓自动分配
+ *
+ * @swagger
+ * tags:
+ *   - name: Transfer Plans
+ *     description: 调拨方案管理
+ */
+
+/**
+ * @swagger
+ * /api/transfer-plans:
+ *   get:
+ *     tags: [Transfer Plans]
+ *     summary: 查询调拨方案列表（支持状态/申请ID过滤）
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, CONFIRMED, REJECTED, PROCESSING, COMPLETED, CANCELLED]
+ *       - name: request_id
+ *         in: query
+ *         schema: { type: integer }
+ *     responses:
+ *       '200': { description: 方案分页列表 }
+ *
+ * /api/transfer-plans/statuses:
+ *   get:
+ *     tags: [Transfer Plans]
+ *     summary: 获取方案状态枚举
+ *     responses:
+ *       '200': { description: 状态字典 }
+ *
+ * /api/transfer-plans/{id}:
+ *   parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *   get:
+ *     tags: [Transfer Plans]
+ *     summary: 查询方案详情（含明细 + 约束违规）
+ *     responses:
+ *       '200': { description: 详情 }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   delete:
+ *     tags: [Transfer Plans]
+ *     summary: 删除方案（仅 PENDING/REJECTED/CANCELLED）
+ *     responses:
+ *       '200': { description: 删除成功 }
+ *
+ * /api/transfer-plans/generate/{requestId}:
+ *   post:
+ *     tags: [Transfer Plans]
+ *     summary: 生成调拨方案（PENDING）
+ *     description: 未指定 source_warehouse_id 的申请会触发多仓自动分配（中心仓优先+安全库存保护）
+ *     parameters:
+ *       - name: requestId
+ *         in: path
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               planner: { type: string, maxLength: 50 }
+ *     responses:
+ *       '201': { description: 方案已生成 }
+ *       '400': { description: 申请状态不允许/明细为空 }
+ *
+ * /api/transfer-plans/{id}/confirm:
+ *   post:
+ *     tags: [Transfer Plans]
+ *     summary: 确认调拨方案（事务）
+ *     description: 源仓可用量扣减+在途加、目标仓在途加、写入 transfer_records、状态 → CONFIRMED
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               review_comment: { type: string, maxLength: 500 }
+ *               operator: { type: string, maxLength: 50 }
+ *     responses:
+ *       '200': { description: 确认成功 }
+ *
+ * /api/transfer-plans/{id}/reject:
+ *   post:
+ *     tags: [Transfer Plans]
+ *     summary: 驳回方案（仅 PENDING）
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [review_comment]
+ *             properties:
+ *               review_comment: { type: string, minLength: 1, maxLength: 500 }
+ *               planner: { type: string }
+ *     responses:
+ *       '200': { description: 驳回成功 }
+ *
+ * /api/transfer-plans/{id}/execute:
+ *   post:
+ *     tags: [Transfer Plans]
+ *     summary: 执行入库（完成调拨）
+ *     description: 源仓在途扣、目标仓在途转可用；方案→COMPLETED，申请→COMPLETED
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               operator: { type: string, maxLength: 50 }
+ *     responses:
+ *       '200': { description: 完成成功 }
  */
 
 const express = require('express');

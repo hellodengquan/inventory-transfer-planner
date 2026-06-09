@@ -3,6 +3,154 @@
  * @module src/routes/warehouses
  * @description 提供仓库的 CRUD、停用保护、编码唯一约束、库存子资源查询等接口。
  *              删除仓库前会校验 HAS_INVENTORY；INACTIVE 仓库会被约束检查排除
+ *
+ * @swagger
+ * components:
+ *   schemas:
+ *     Warehouse:
+ *       type: object
+ *       description: 仓库实体
+ *       properties:
+ *         id: { type: integer, example: 1 }
+ *         code: { type: string, example: WH-BJ, description: 仓库编码 }
+ *         name: { type: string, example: 北京中心仓 }
+ *         location: { type: string, example: 北京市朝阳区 }
+ *         type: { type: string, enum: [CENTER, REGIONAL, NORMAL], description: 仓库类型 }
+ *         status: { type: string, enum: [ACTIVE, INACTIVE] }
+ *         min_security_stock: { type: integer, minimum: 0 }
+ *         created_at: { type: string, format: date-time }
+ *         updated_at: { type: string, format: date-time }
+ *     WarehouseCreate:
+ *       type: object
+ *       required: [code, name]
+ *       properties:
+ *         code: { type: string, maxLength: 32 }
+ *         name: { type: string, maxLength: 100 }
+ *         location: { type: string, maxLength: 200 }
+ *         type: { type: string, enum: [CENTER, REGIONAL, NORMAL], default: NORMAL }
+ *         status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+ *         min_security_stock: { type: integer, minimum: 0, default: 0 }
+ *   parameters:
+ *     Page:
+ *       name: page
+ *       in: query
+ *       schema: { type: integer, minimum: 1, default: 1 }
+ *     PageSize:
+ *       name: pageSize
+ *       in: query
+ *       schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+ *     IdParam:
+ *       name: id
+ *       in: path
+ *       required: true
+ *       schema: { type: integer, minimum: 1 }
+ *   responses:
+ *     NotFound:
+ *       description: 资源不存在
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               error: { type: string }
+ *               code: { type: string, example: WAREHOUSE_NOT_FOUND }
+ *               requestId: { type: string }
+ *               timestamp: { type: string, format: date-time }
+ *
+ * tags:
+ *   - name: Warehouses
+ *     description: 仓库管理
+ */
+
+/**
+ * @swagger
+ * /api/warehouses:
+ *   get:
+ *     tags: [Warehouses]
+ *     summary: 查询仓库列表（支持多维度过滤）
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE] }
+ *       - name: type
+ *         in: query
+ *         schema: { type: string, enum: [CENTER, REGIONAL, NORMAL] }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string }
+ *         description: 关键字（名称/编码/位置）
+ *     responses:
+ *       '200':
+ *         description: 仓库列表
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data: { type: array, items: { $ref: '#/components/schemas/Warehouse' } }
+ *                 total: { type: integer }
+ *   post:
+ *     tags: [Warehouses]
+ *     summary: 创建仓库
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/WarehouseCreate' }
+ *     responses:
+ *       '201': { description: 创建成功 }
+ *       '400': { description: 编码重复或必填项缺失 }
+ *
+ * /api/warehouses/{id}:
+ *   parameters:
+ *     - $ref: '#/components/parameters/IdParam'
+ *   get:
+ *     tags: [Warehouses]
+ *     summary: 查询单个仓库
+ *     responses:
+ *       '200':
+ *         description: 仓库详情
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data: { $ref: '#/components/schemas/Warehouse' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   put:
+ *     tags: [Warehouses]
+ *     summary: 更新仓库
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/WarehouseCreate' }
+ *     responses:
+ *       '200': { description: 更新成功 }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   delete:
+ *     tags: [Warehouses]
+ *     summary: 删除仓库（仅当无库存引用）
+ *     responses:
+ *       '200': { description: 删除成功 }
+ *       '400': { description: 有库存引用 HAS_INVENTORY }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *
+ * /api/warehouses/{id}/inventory:
+ *   parameters:
+ *     - $ref: '#/components/parameters/IdParam'
+ *   get:
+ *     tags: [Warehouses]
+ *     summary: 查询仓库的库存明细
+ *     parameters:
+ *       - name: sku_id
+ *         in: query
+ *         schema: { type: integer }
+ *       - name: low_stock
+ *         in: query
+ *         schema: { type: boolean, description: 仅筛选低库存 }
+ *     responses:
+ *       '200': { description: 库存明细 }
  */
 
 const express = require('express');

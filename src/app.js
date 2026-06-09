@@ -2,8 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-const YAML = require('yamljs');
+const swaggerJSDoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+
+try {
+  require('dotenv').config();
+} catch (_err) {
+  /* 无 dotenv 不影响运行，保持兼容 */
+}
 
 const { logger } = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
@@ -47,9 +53,37 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 app.use(requestLogger());
 
 try {
-  const openapiPath = path.join(__dirname, 'docs', 'openapi.yaml');
-  const swaggerDocument = YAML.load(openapiPath);
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  const swaggerSpec = swaggerJSDoc({
+    definition: {
+      openapi: '3.0.3',
+      info: {
+        title: '库存调拨规划器 API',
+        version: '1.0.0',
+        description: `库存调拨规划器提供完整的调拨申请、库存约束检查、调拨方案生成与确认、
+多仓自动分配、仓库/SKU/库存/调拨记录等能力。
+**约束分级**: FATAL / WARNING / INFO。
+**调拨方案状态机**: PENDING → CONFIRMED → COMPLETED；分支 REJECTED / CANCELLED。
+Swagger UI 由 swagger-jsdoc 自动从路由 JSDoc 注解生成，保证代码与文档实时一致。`,
+        contact: { name: 'Inventory Ops Team' }
+      },
+      servers: [
+        { url: `http://localhost:${PORT}`, description: '本地开发环境' },
+        { url: '/', description: '当前部署' }
+      ],
+      tags: [
+        { name: 'Health', description: '健康检查' },
+        { name: 'Warehouses', description: '仓库管理' },
+        { name: 'SKUs', description: 'SKU 管理' },
+        { name: 'Inventory', description: '库存管理' },
+        { name: 'Transfer Requests', description: '调拨申请' },
+        { name: 'Transfer Plans', description: '调拨方案' },
+        { name: 'Transfer Records', description: '调拨记录' }
+      ]
+    },
+    apis: [path.join(__dirname, 'routes', '*.js')]
+  });
+
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     explorer: true,
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: '库存调拨规划器 API',
@@ -60,12 +94,12 @@ try {
       showRequestHeaders: true
     }
   }));
-  app.get('/api-docs/openapi.yaml', (req, res) => {
-    res.type('application/yaml');
-    res.sendFile(openapiPath);
+
+  app.get('/api-docs/openapi.json', (req, res) => {
+    res.json(swaggerSpec);
   });
 } catch (err) {
-  logger.warn('Swagger UI 初始化失败，跳过挂载', { component: 'swagger', error: err.message });
+  logger.warn('Swagger UI/文档初始化失败，跳过挂载', { component: 'swagger', error: err.message, stack: err.stack });
 }
 
 app.get('/api/health', (req, res) => {

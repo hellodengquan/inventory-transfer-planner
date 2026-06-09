@@ -4,6 +4,131 @@
  * @description 提供调拨申请的 CRUD、状态流转（提交/取消/删除）、
  *              约束检查预览等接口。创建接口挂载 transferRequestCreate 校验规则；
  *              状态流转遵循状态机约束，允许 DRAFT→SUBMITTED→PLANNING→APPROVED→COMPLETED
+ *
+ * @swagger
+ * tags:
+ *   - name: Transfer Requests
+ *     description: 调拨申请管理
+ */
+
+/**
+ * @swagger
+ * /api/transfer-requests:
+ *   get:
+ *     tags: [Transfer Requests]
+ *     summary: 查询调拨申请列表（支持状态/优先级/仓库/关键字过滤）
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, SUBMITTED, PLANNING, APPROVED, PROCESSING, COMPLETED, CANCELLED, REJECTED]
+ *       - name: priority
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [LOW, NORMAL, HIGH, URGENT]
+ *       - name: source_warehouse_id
+ *         in: query
+ *         schema: { type: integer }
+ *       - name: target_warehouse_id
+ *         in: query
+ *         schema: { type: integer }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string }
+ *     responses:
+ *       '200': { description: 申请分页列表 }
+ *   post:
+ *     tags: [Transfer Requests]
+ *     summary: 创建调拨申请
+ *     description: 挂载 express-validator transferRequestCreate 校验，支持 auto_submit 立即提交；
+ *                  未指定 source_warehouse_id 时走多仓自动分配路径
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [target_warehouse_id, items]
+ *             properties:
+ *               source_warehouse_id: { type: integer }
+ *               target_warehouse_id: { type: integer, minimum: 1 }
+ *               request_type:
+ *                 type: string
+ *                 enum: [NORMAL, URGENT, EMERGENCY]
+ *                 default: NORMAL
+ *               priority:
+ *                 type: string
+ *                 enum: [LOW, NORMAL, HIGH, URGENT]
+ *                 default: NORMAL
+ *               requester: { type: string }
+ *               department: { type: string }
+ *               reason: { type: string, maxLength: 500 }
+ *               expected_date: { type: string, format: date }
+ *               items:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [sku_id, requested_qty]
+ *                   properties:
+ *                     sku_id: { type: integer, minimum: 1 }
+ *                     requested_qty: { type: integer, minimum: 1 }
+ *                     unit_price: { type: number }
+ *                     remark: { type: string }
+ *               auto_submit: { type: boolean, default: false }
+ *     responses:
+ *       '201': { description: 创建成功 }
+ *       '400': { description: 校验失败 VALIDATION_ERROR }
+ *
+ * /api/transfer-requests/statuses:
+ *   get:
+ *     tags: [Transfer Requests]
+ *     summary: 获取申请状态枚举
+ *     responses:
+ *       '200': { description: 状态字典 }
+ *
+ * /api/transfer-requests/{id}:
+ *   parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *   get:
+ *     tags: [Transfer Requests]
+ *     summary: 查询申请详情（含明细 + 关联方案 + 约束违规列表）
+ *     responses:
+ *       '200': { description: 详情 }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   put:
+ *     tags: [Transfer Requests]
+ *     summary: 更新调拨申请
+ *     responses:
+ *       '200': { description: 更新成功 }
+ *   delete:
+ *     tags: [Transfer Requests]
+ *     summary: 删除调拨申请（仅 DRAFT/CANCELLED/REJECTED 且无关联方案）
+ *     responses:
+ *       '200': { description: 删除成功 }
+ *
+ * /api/transfer-requests/{id}/submit:
+ *   post:
+ *     tags: [Transfer Requests]
+ *     summary: 提交申请 → SUBMITTED
+ *     responses:
+ *       '200': { description: 提交成功 }
+ *
+ * /api/transfer-requests/{id}/cancel:
+ *   post:
+ *     tags: [Transfer Requests]
+ *     summary: 取消申请（仅非 COMPLETED/CANCELLED）
+ *     responses:
+ *       '200': { description: 取消成功 }
+ *
+ * /api/transfer-requests/{id}/check-constraints:
+ *   post:
+ *     tags: [Transfer Requests]
+ *     summary: 预览 8 类约束检查（不生成方案）
+ *     responses:
+ *       '200':
+ *         description: 检查结果含 FATAL/WARNING/INFO 数量与明细
  */
 
 const express = require('express');

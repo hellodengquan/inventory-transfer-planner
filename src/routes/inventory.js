@@ -4,6 +4,139 @@
  * @description 提供库存的多维度查询、汇总统计、低库存告警、CRUD、
  *              六大类型批量调整（IN/OUT/RESERVE/RELEASE/IN_TRANSIT_*）等接口。
  *              调整操作使用 SQLite 事务保证原子性，禁止调整后数量为负
+ *
+ * @swagger
+ * tags:
+ *   - name: Inventory
+ *     description: 库存管理
+ */
+
+/**
+ * @swagger
+ * /api/inventory:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: 分页查询库存（支持仓库/SKU/分类/低库存/关键字过滤）
+ *     parameters:
+ *       - name: warehouse_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: sku_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: category
+ *         in: query
+ *         schema: { type: string }
+ *       - name: low_stock
+ *         in: query
+ *         schema: { type: boolean }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string }
+ *     responses:
+ *       '200': { description: 分页库存 }
+ *   post:
+ *     tags: [Inventory]
+ *     summary: 创建单条库存记录
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [warehouse_id, sku_id]
+ *             properties:
+ *               warehouse_id: { type: integer, minimum: 1 }
+ *               sku_id: { type: integer, minimum: 1 }
+ *               available_qty: { type: integer, minimum: 0, default: 0 }
+ *               reserved_qty: { type: integer, minimum: 0, default: 0 }
+ *               in_transit_qty: { type: integer, minimum: 0, default: 0 }
+ *               min_stock: { type: integer, minimum: 0, default: 0 }
+ *               max_stock: { type: integer, minimum: 0 }
+ *     responses:
+ *       '201': { description: 创建成功 }
+ *
+ * /api/inventory/summary:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: 按仓库汇总库存（总量/SKU数/低库存数）
+ *     parameters:
+ *       - name: warehouse_id
+ *         in: query
+ *         schema: { type: integer }
+ *     responses:
+ *       '200': { description: 汇总数据 }
+ *
+ * /api/inventory/low-stock:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: 低库存告警列表（含缺口数量）
+ *     parameters:
+ *       - name: warehouse_id
+ *         in: query
+ *         schema: { type: integer }
+ *       - name: threshold
+ *         in: query
+ *         schema: { type: integer, minimum: 0 }
+ *     responses:
+ *       '200': { description: 低库存记录 }
+ *
+ * /api/inventory/{warehouse_id}/{sku_id}:
+ *   parameters:
+ *     - name: warehouse_id
+ *       in: path
+ *       required: true
+ *       schema: { type: integer, minimum: 1 }
+ *     - name: sku_id
+ *       in: path
+ *       required: true
+ *       schema: { type: integer, minimum: 1 }
+ *   get:
+ *     tags: [Inventory]
+ *     summary: 查询单条库存（仓库+SKU复合主键）
+ *     responses:
+ *       '200': { description: 库存详情 }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   put:
+ *     tags: [Inventory]
+ *     summary: 更新单条库存字段
+ *     responses:
+ *       '200': { description: 更新成功 }
+ *
+ * /api/inventory/adjust:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: 批量调整库存（事务保护）
+ *     description: |
+ *       支持 6 种 change_type：
+ *       - IN 入库、OUT 出库
+ *       - RESERVE 预留 / RELEASE 释放
+ *       - IN_TRANSIT_IN / IN_TRANSIT_OUT 在途量
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [adjustments]
+ *             properties:
+ *               adjustments:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [warehouse_id, sku_id, qty_change, change_type]
+ *                   properties:
+ *                     warehouse_id: { type: integer }
+ *                     sku_id: { type: integer }
+ *                     qty_change: { type: integer, minimum: 1 }
+ *                     change_type:
+ *                       type: string
+ *                       enum: [IN, OUT, RESERVE, RELEASE, IN_TRANSIT_IN, IN_TRANSIT_OUT]
+ *               operator: { type: string }
+ *               remark: { type: string }
+ *     responses:
+ *       '200': { description: 调整成功 }
+ *       '400': { description: 调整后数量为负或库存不存在 }
  */
 
 const express = require('express');

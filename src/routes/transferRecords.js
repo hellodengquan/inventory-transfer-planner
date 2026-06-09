@@ -4,6 +4,115 @@
  * @description 提供调拨历史记录的多维度筛选查询、单条详情、
  *              入/出方向的汇总统计（按仓库或 SKU 聚合）等只读接口。
  *              transfer_records 数据由 transferPlans.confirm 事务自动写入，不提供直接创建接口
+ *
+ * @swagger
+ * tags:
+ *   - name: Transfer Records
+ *     description: 调拨记录（只读，由方案确认事务自动写入）
+ */
+
+/**
+ * @swagger
+ * /api/transfer-records:
+ *   get:
+ *     tags: [Transfer Records]
+ *     summary: 分页查询调拨记录（源/目标仓、SKU、方案、申请、日期、关键字）
+ *     parameters:
+ *       - name: source_warehouse_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: target_warehouse_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: sku_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: plan_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: request_id
+ *         in: query
+ *         schema: { type: integer, minimum: 1 }
+ *       - name: start_date
+ *         in: query
+ *         schema: { type: string, format: date }
+ *       - name: end_date
+ *         in: query
+ *         schema: { type: string, format: date }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string, maxLength: 50 }
+ *       - $ref: '#/components/parameters/Page'
+ *       - name: pageSize
+ *         in: query
+ *         schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+ *     responses:
+ *       '200':
+ *         description: 分页记录
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: integer }
+ *                       record_no: { type: string }
+ *                       source_warehouse_id: { type: integer }
+ *                       target_warehouse_id: { type: integer }
+ *                       sku_id: { type: integer }
+ *                       transfer_qty: { type: integer }
+ *                       operator: { type: string }
+ *                       operate_time: { type: string, format: date-time }
+ *                       source_code: { type: string }
+ *                       target_code: { type: string }
+ *                       sku_code: { type: string }
+ *                 total: { type: integer }
+ *                 page: { type: integer }
+ *                 pageSize: { type: integer }
+ *
+ * /api/transfer-records/summary:
+ *   get:
+ *     tags: [Transfer Records]
+ *     summary: 调拨汇总统计（按方向聚合）
+ *     parameters:
+ *       - name: warehouse_id
+ *         in: query
+ *         schema: { type: integer }
+ *       - name: start_date
+ *         in: query
+ *         schema: { type: string, format: date }
+ *       - name: end_date
+ *         in: query
+ *         schema: { type: string, format: date }
+ *       - name: group_by
+ *         in: query
+ *         schema: { type: string, enum: [warehouse, sku], default: warehouse }
+ *     responses:
+ *       '200':
+ *         description: 入/出方向聚合结果
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     outbound: { type: array }
+ *                     inbound: { type: array }
+ *
+ * /api/transfer-records/{id}:
+ *   parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *   get:
+ *     tags: [Transfer Records]
+ *     summary: 查询单条调拨记录详情
+ *     responses:
+ *       '200': { description: 记录详情（含关联仓库/SKU/方案/申请） }
+ *       '404': { $ref: '#/components/responses/NotFound' }
  */
 
 const express = require('express');

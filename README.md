@@ -46,7 +46,30 @@ npm run dev
 
 # 5. 健康检查
 curl http://localhost:3000/api/health
+
+# 6. 打开 Swagger UI 交互文档
+open http://localhost:3000/api-docs
 ```
+
+### 环境变量配置
+
+项目通过 `dotenv` 加载 `.env` 文件，可从 `.env.example` 复制模板。核心环境变量：
+
+| 变量 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `PORT` | integer | `3000` | HTTP 服务监听端口 |
+| `NODE_ENV` | enum | `development` | 运行环境，影响默认日志级别 |
+| `LOG_LEVEL` | enum | 按 `NODE_ENV` 自动推导 | 覆盖默认日志级别：`error`/`warn`/`info`/`http`/`verbose`/`debug`/`silly` |
+| `DB_PATH` | string | `data/inventory.db` | SQLite 数据库文件路径 |
+
+**默认日志级别策略（未设置 LOG_LEVEL 时）：**
+
+| NODE_ENV | 默认级别 | 说明 |
+|----------|---------|------|
+| `development` / `dev` | `debug` | 开发期细节可见，便于调试 |
+| `test` / `testing` | `warn` | 仅告警及以上，测试输出干净 |
+| `production` / `prod` | `error` | 仅致命错误，降低 IO 成本 |
+| 其他 | `info` | 通用默认 |
 
 ### 运行自动化测试
 
@@ -67,9 +90,15 @@ npm run test:watch
 ```
 22-inventory-transfer-planner/
 ├── src/
-│   ├── app.js                          # Express 应用入口
+│   ├── app.js                          # Express 应用入口（请求 ID、日志、Swagger UI、错误处理）
 │   ├── db/
 │   │   └── database.js                 # SQLite 连接封装 (runQuery/getQuery/allQuery)
+│   ├── utils/
+│   │   └── logger.js                   # ⭐ winston 结构化日志（分级 + requestId 注入）
+│   ├── middleware/
+│   │   ├── validateRequest.js          # ⭐ express-validator 统一请求校验（20+规则集）
+│   │   ├── requestLogger.js            # ⭐ 请求/响应日志 + 耗时 + requestId 头
+│   │   └── errorHandler.js             # ⭐ 全局错误处理（4xx/5xx 分类 + 统一 JSON）
 │   ├── routes/
 │   │   ├── warehouses.js               # 仓库管理 API
 │   │   ├── skus.js                     # SKU 管理 API
@@ -84,11 +113,16 @@ npm run test:watch
 │   ├── test-helper.js                  # 测试工具（独立数据库初始化/播种）
 │   ├── constraintCheck.test.js         # 约束检查测试（14 用例）
 │   ├── transferPlan.test.js            # 状态机测试（12 用例）
-│   └── multiWarehouseAllocation.test.js# 多仓分配测试（14 用例）
+│   ├── multiWarehouseAllocation.test.js# 多仓分配测试（14 用例）
+│   ├── warehouses.test.js              # 仓库 CRUD 与停用保护（20 用例）
+│   ├── inventory.test.js               # 库存调整与安全库存边界（29 用例）
+│   ├── transferRecords.test.js         # 调拨记录创建与状态联动（33 用例）
+│   └── observability.test.js           # 可观测性集成（swagger-jsdoc + 日志级别切换）
 ├── scripts/
 │   ├── init-db.js                      # 数据库初始化脚本
 │   └── seed-data.js                    # 示例数据脚本
 ├── data/                               # SQLite 数据文件目录
+├── .env.example                        # 环境变量示例（PORT/NODE_ENV/LOG_LEVEL/DB_PATH）
 ├── package.json
 └── README.md
 ```
@@ -286,37 +320,53 @@ npm run test:watch
 
 服务默认端口 `3000`，统一前缀 `/api`，响应格式为 JSON。
 
-### 调拨申请
+### Swagger UI 交互文档（推荐）
 
-| 方法 | 路径 | 说明 |
+OpenAPI 3.0 规范由 **swagger-jsdoc** 自动从路由文件的 `@swagger` JSDoc 注解生成，
+确保代码与文档**实时一致**（不再需要手写 YAML）。
+
+| 入口 | 地址 | 说明 |
 |------|------|------|
-| GET | `/transfer-requests` | 分页查询申请列表（按状态/优先级/仓库/关键字筛选） |
-| GET | `/transfer-requests/:id` | 申请详情（含明细 + 关联方案） |
-| POST | `/transfer-requests` | 创建申请（支持 `auto_submit: true` 直接提交） |
-| PUT | `/transfer-requests/:id` | 更新申请（仅 DRAFT/REJECTED 状态） |
-| POST | `/transfer-requests/:id/submit` | 提交申请（DRAFT → SUBMITTED） |
-| POST | `/transfer-requests/:id/cancel` | 取消申请 |
-| POST | `/transfer-requests/:id/check-constraints` | 立即执行约束检查（不生成方案） |
-| DELETE | `/transfer-requests/:id` | 删除申请 |
+| Swagger UI 交互页 | `GET /api-docs` | 支持 Try it out 在线调试、筛选、请求头显示 |
+| OpenAPI JSON | `GET /api-docs/openapi.json` | 供客户端代码生成工具消费 |
+| 健康检查 | `GET /api/health` | 返回服务状态、版本、请求 ID、docs 地址 |
 
-### 调拨方案
+### 接口摘要（全部共 37 个端点）
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/transfer-plans` | 分页查询方案列表 |
-| GET | `/transfer-plans/:id` | 方案详情（含明细 + 约束违规记录） |
-| POST | `/transfer-plans/generate/:requestId` | 生成方案 + 执行约束检查 |
-| POST | `/transfer-plans/:id/confirm` | 确认方案 → 源仓可用扣减，转在途 |
-| POST | `/transfer-plans/:id/reject` | 驳回方案 |
-| POST | `/transfer-plans/:id/execute` | 执行入库 → 在途转目标仓可用 |
-| DELETE | `/transfer-plans/:id` | 删除（取消）方案 |
+**调拨申请** (`/api/transfer-requests`)
+GET 列表/详情、POST 创建+校验、PUT 更新、POST 提交/取消/检查约束、DELETE 删除
 
-### 辅助接口
+**调拨方案** (`/api/transfer-plans`)
+GET 列表/详情、POST 生成/确认/驳回/执行、DELETE 取消（含完整状态机 PENDING→CONFIRMED→COMPLETED）
 
-- `GET /api/warehouses` 仓库列表，`GET /api/warehouses/:id/inventory` 仓库库存明细
-- `GET /api/skus` SKU 列表，`GET /api/skus/:id/inventory` SKU 分布查询
-- `GET /api/inventory` 库存查询（`low_stock=true` 低库存筛选），`GET /api/inventory/summary` 汇总
-- `GET /api/transfer-records` 调拨记录查询，`GET /api/transfer-records/summary` 出入库汇总
+**辅助接口**
+- 仓库：`GET/POST/PUT/DELETE /api/warehouses` + `GET :id/inventory`
+- SKU：`GET/POST/PUT/DELETE /api/skus` + `GET :id/inventory` + `GET /categories`
+- 库存：`GET/POST /api/inventory` + `GET :warehouse_id/:sku_id`(查询/更新) + `POST /adjust`（6 种类型事务调整） + `GET /summary` + `GET /low-stock`
+- 调拨记录：`GET /api/transfer-records`（7 维度过滤） + `GET /summary`（方向聚合） + `GET :id`
+
+### 统一错误响应格式
+
+所有 4xx/5xx 错误均通过全局错误处理中间件返回统一结构：
+```json
+{
+  "error": "面向用户的可读消息",
+  "code": "WAREHOUSE_NOT_FOUND",
+  "requestId": "a1b2c3d4e5f6789",
+  "timestamp": "2025-07-01T12:00:00.000Z"
+}
+```
+
+### 请求校验错误（VALIDATION_ERROR）
+
+express-validator 校验失败时 `code=VALIDATION_ERROR`，并附加 `errors` 数组，包含字段路径和消息：
+```json
+{
+  "error": "请求参数校验失败",
+  "code": "VALIDATION_ERROR",
+  "errors": [{ "path": "target_warehouse_id", "message": "target_warehouse_id 必填", "value": null }]
+}
+```
 
 ---
 
@@ -331,7 +381,11 @@ npm run test:watch
 | `tests/constraintCheck.test.js` | **14** | 8 类约束全覆盖、FATAL(7)/WARNING(3)/INFO(1) 三级严重度触发、完美场景、8 类类型断言 |
 | `tests/transferPlan.test.js` | **12** | 主干路径4步(PENDING→CONFIRMED→COMPLETED)、REJECTED分支3步、非法转换拦截3种、CANCELLED回退、约束落库 |
 | `tests/multiWarehouseAllocation.test.js` | **14** | 4条排序规则验证、4种安全库存保护、4种调配场景（单仓/多仓/全网不足/目标仓排除）、2种落库完整性 |
-| **合计** | **40** | - |
+| `tests/warehouses.test.js` | **20** | CRUD、编码唯一约束、HAS_INVENTORY 删除保护、INACTIVE 调拨拦截、关键字/状态/类型过滤、库存列表、低库存筛选 |
+| `tests/inventory.test.js` | **29** | 6 类调整事务、安全库存 6 边界场景、复合主键 UNIQUE、低库存筛选/汇总、数量范围校验 |
+| `tests/transferRecords.test.js` | **33** | 单仓/多仓 4 阶段状态联动、6 维度筛选、方向汇总、唯一性约束、外键约束、字段校验、中间件 13 规则 |
+| `tests/observability.test.js` | **≥5** | swagger-jsdoc 自动生成规范（paths/schemas/tags 验证）、日志级别切换（NODE_ENV 默认+ LOG_LEVEL 覆盖） |
+| **合计** | **≥127** | - |
 
 ### 运行测试
 

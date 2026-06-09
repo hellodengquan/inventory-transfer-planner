@@ -3,6 +3,85 @@
  * @module src/routes/skus
  * @description 提供商品 SKU 的 CRUD、分类枚举、编码唯一约束、全网库存查询等接口。
  *              删除 SKU 前校验是否存在库存引用（HAS_INVENTORY）
+ *
+ * @swagger
+ * tags:
+ *   - name: SKUs
+ *     description: 商品 SKU 管理
+ */
+
+/**
+ * @swagger
+ * /api/skus:
+ *   get:
+ *     tags: [SKUs]
+ *     summary: 查询 SKU 列表（支持状态/分类/关键字过滤）
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE] }
+ *       - name: category
+ *         in: query
+ *         schema: { type: string }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string }
+ *     responses:
+ *       '200': { description: SKU 分页列表 }
+ *   post:
+ *     tags: [SKUs]
+ *     summary: 创建 SKU
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sku_code, name]
+ *             properties:
+ *               sku_code: { type: string }
+ *               name: { type: string }
+ *               category: { type: string }
+ *               unit: { type: string, default: 件 }
+ *               spec: { type: string }
+ *               weight: { type: number, minimum: 0 }
+ *               volume: { type: number, minimum: 0 }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+ *     responses:
+ *       '201': { description: 创建成功 }
+ *
+ * /api/skus/categories:
+ *   get:
+ *     tags: [SKUs]
+ *     summary: 获取所有 SKU 分类集合
+ *     responses:
+ *       '200': { description: 分类名称数组 }
+ *
+ * /api/skus/{id}:
+ *   parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *   get:
+ *     tags: [SKUs]
+ *     summary: 查询单个 SKU
+ *     responses:
+ *       '200': { description: SKU 详情 }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   put:
+ *     tags: [SKUs]
+ *     summary: 更新 SKU
+ *     responses:
+ *       '200': { description: 更新成功 }
+ *   delete:
+ *     tags: [SKUs]
+ *     summary: 删除 SKU（仅无库存引用）
+ *     responses:
+ *       '200': { description: 删除成功 }
+ *
+ * /api/skus/{id}/inventory:
+ *   parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *   get:
+ *     tags: [SKUs]
+ *     summary: 查询 SKU 全网各仓库库存
+ *     responses:
+ *       '200': { description: 各仓库库存列表 }
  */
 
 const express = require('express');
