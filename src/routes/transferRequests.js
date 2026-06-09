@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery, db } = require('../db/database');
 const constraintCheckService = require('../services/constraintCheckService');
+const { validate, rules } = require('../middleware/validateRequest');
 
 function generateRequestNo() {
   const now = new Date();
@@ -137,7 +138,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+router.post('/', validate(rules.transferRequestCreate), async (req, res, next) => {
   try {
     const {
       source_warehouse_id,
@@ -228,7 +229,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', validate(rules.transferRequestUpdate), async (req, res, next) => {
   try {
     const existing = await getQuery('SELECT * FROM transfer_requests WHERE id = ?', [req.params.id]);
     if (!existing) {

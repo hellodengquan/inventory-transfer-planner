@@ -185,7 +185,7 @@ class TransferPlanService {
       return inserted;
     });
 
-    return { planId: planResult.lastID, plan_no, checkResult, total_transfer_qty };
+    return { planId: planResult.lastID, requestId: request.id, plan_no, status: 'PENDING', checkResult, total_transfer_qty, request_id: request.id };
   }
 
   async confirmPlan(planId, review_comment = '', operator = 'system') {

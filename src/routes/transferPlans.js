@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { runQuery, getQuery, allQuery, db } = require('../db/database');
 const constraintCheckService = require('../services/constraintCheckService');
+const { validate, rules } = require('../middleware/validateRequest');
 
 function generatePlanNo() {
   const now = new Date();
@@ -162,7 +163,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/generate/:requestId', async (req, res, next) => {
+router.post('/generate/:requestId', validate(rules.transferPlanGenerate), async (req, res, next) => {
   try {
     const { planner } = req.body;
     const request = await getQuery('SELECT * FROM transfer_requests WHERE id = ?', [req.params.requestId]);
@@ -341,7 +342,7 @@ router.post('/generate/:requestId', async (req, res, next) => {
   }
 });
 
-router.post('/:id/confirm', async (req, res, next) => {
+router.post('/:id/confirm', validate(rules.transferPlanConfirm), async (req, res, next) => {
   try {
     const { review_comment, operator } = req.body;
     const plan = await getQuery('SELECT * FROM transfer_plans WHERE id = ?', [req.params.id]);
@@ -462,7 +463,7 @@ router.post('/:id/confirm', async (req, res, next) => {
   }
 });
 
-router.post('/:id/reject', async (req, res, next) => {
+router.post('/:id/reject', validate(rules.transferPlanReject), async (req, res, next) => {
   try {
     const { review_comment, planner } = req.body;
     const plan = await getQuery('SELECT * FROM transfer_plans WHERE id = ?', [req.params.id]);
@@ -514,7 +515,7 @@ router.post('/:id/reject', async (req, res, next) => {
   }
 });
 
-router.post('/:id/execute', async (req, res, next) => {
+router.post('/:id/execute', validate(rules.transferPlanExecute), async (req, res, next) => {
   try {
     const { operator } = req.body;
     const plan = await getQuery('SELECT * FROM transfer_plans WHERE id = ?', [req.params.id]);
